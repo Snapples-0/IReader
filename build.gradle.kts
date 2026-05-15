@@ -64,6 +64,10 @@ subprojects {
             freeCompilerArgs.addAll(
                 "-Xexpect-actual-classes"
             )
+            // Reduce Kotlin/Native optimizer memory pressure for iOS CI builds.
+            if (this@configureEach.name.contains("Ios", ignoreCase = true)) {
+                freeCompilerArgs.add("-Xbinary=optimization=none")
+            }
         }
     }
     
