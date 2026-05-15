@@ -1,0 +1,56 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Install CocoaPods
+        run: |
+          cd iosApp
+          pod install
+
+      - name: Build Kotlin iOS Framework
+        run: ./gradlew :shared:assembleReleaseXCFramework
+
+      - name: Build Xcode Archive (unsigned)
+        run: |
+          xcodebuild archive \
+            -workspace iosApp/iosApp.xcworkspace \
+            -scheme iosApp \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/IReader.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE=""
+
+      - name: Export unsigned IPA
+        run: |
+          mkdir -p $RUNNER_TEMP/ipa
+          cp -r "$RUNNER_TEMP/IReader.xcarchive/Products/Applications/iosApp.app" $RUNNER_TEMP/ipa/Payload
+          cd $RUNNER_TEMP/ipa
+          zip -r IReader-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IReader-unsigned
+          path: $RUNNER_TEMP/ipa/IReader-unsigned.ipa
+          retention-days: 30
