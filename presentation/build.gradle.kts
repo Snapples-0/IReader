@@ -74,13 +74,16 @@ kotlin {
     }
 
     sourceSets {
-         commonMain {
+        commonMain {
             dependencies {
-                api(project(Modules.domain))
-                api(project(Modules.coreApi))
-                api(project(Modules.sourceApi))
-                api(project(Modules.data))
-                api(project(Modules.commonResources))
+                // Keep internal to reduce iOS framework export surface and linker memory use.
+                implementation(project(Modules.domain))
+                implementation(project(Modules.coreApi))
+                implementation(project(Modules.sourceApi))
+                implementation(project(Modules.data))
+                implementation(project(Modules.commonResources))
+
+                // Keep API: types/composables from presentation-core are part of presentation's shared UI surface.
                 api(project(Modules.presentationCore))
 
                 api(compose.foundation)
@@ -180,7 +183,5 @@ kotlin {
         }
     }
 }
-
-
 
 

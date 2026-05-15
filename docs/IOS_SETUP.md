@@ -168,6 +168,12 @@ The iOS app uses a hybrid architecture:
 
 The `ContentView.swift` provides a fallback SwiftUI interface that mirrors the Compose UI structure, allowing the app to function even without the Compose framework linked.
 
+### Dependency exposure guideline (`:presentation`)
+
+To keep `:presentation:linkReleaseFrameworkIosArm64` reliable in CI, prefer `implementation(project(...))` for new `:presentation` dependencies.
+
+Only use `api(project(...))` when that dependency must be intentionally exposed through the iOS/Swift interop surface.
+
 ## App Icons
 
 App icons are located in `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/`. The icons were generated from the source files in `ios-icon/`.
