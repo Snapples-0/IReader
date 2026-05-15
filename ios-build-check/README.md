@@ -154,6 +154,10 @@ kotlin.suppressGradlePluginWarnings=IncorrectCompileOnlyDependencyWarning
    - WKWebView for browser engine
    - NSHTTPCookieStorage for cookies
 
+4. **Modularize large shared source sets for iOS stability**
+   - Split the heaviest multiplatform code (especially `presentation` + transitive deps) into smaller feature modules.
+   - Smaller native link units reduce peak Kotlin/Native heap usage and improve CI reliability on `iosArm64`.
+
 ## Testing Commands
 
 ```bash

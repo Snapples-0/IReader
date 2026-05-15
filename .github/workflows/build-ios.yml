@@ -7,6 +7,7 @@ on:
 
 jobs:
   build-ios:
+    # If available in your org plan, prefer `macos-latest-large` for extra RAM headroom.
     runs-on: macos-latest
     timeout-minutes: 90
 
@@ -26,17 +27,22 @@ jobs:
       - name: Tune Gradle for CI
         run: |
           cat >> gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx16g -Dfile.encoding=UTF-8
+          # iOS/Kotlin-Native linking can OOM on default CI heap sizes.
+          org.gradle.jvmargs=-Xmx12g -Dfile.encoding=UTF-8
+          kotlin.native.memoryMaxHeap=14g
           org.gradle.parallel=false
-          org.gradle.workers.max=2
-          kotlin.native.memoryMaxHeap=8g
-          kotlin.native.cacheKind=none
+          org.gradle.workers.max=1
+          # Keep static cache for stability/perf; switch to `none` only if cache-specific errors appear.
+          kotlin.native.cacheKind=static
           EOF
 
       - name: Install CocoaPods
         run: |
           cd iosApp
           pod install
+
+      - name: Clean Gradle build before archive
+        run: ./gradlew clean
 
       - name: Build Xcode Archive (unsigned)
         run: |
