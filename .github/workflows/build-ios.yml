@@ -26,9 +26,10 @@ jobs:
       - name: Tune Gradle for CI
         run: |
           cat >> gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx12g -Dfile.encoding=UTF-8
+          org.gradle.jvmargs=-Xmx16g -Dfile.encoding=UTF-8
           org.gradle.parallel=false
           org.gradle.workers.max=2
+          kotlin.native.memoryMaxHeap=8g
           kotlin.native.cacheKind=none
           EOF
 
