@@ -27,8 +27,8 @@ jobs:
           cd iosApp
           pod install
 
-      - name: Build Kotlin iOS Framework
-        run: ./gradlew :shared:assembleReleaseXCFramework
+      - name: List available Gradle tasks (debug)
+        run: ./gradlew tasks --all | grep -i ios || true
 
       - name: Build Xcode Archive (unsigned)
         run: |
@@ -39,12 +39,14 @@ jobs:
             -archivePath $RUNNER_TEMP/IReader.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE=""
+            PROVISIONING_PROFILE="" \
+            -allowProvisioningUpdates 2>&1 | tee xcodebuild.log
 
       - name: Export unsigned IPA
         run: |
-          mkdir -p $RUNNER_TEMP/ipa
-          cp -r "$RUNNER_TEMP/IReader.xcarchive/Products/Applications/iosApp.app" $RUNNER_TEMP/ipa/Payload
+          APP_PATH=$(find $RUNNER_TEMP/IReader.xcarchive -name "*.app" | head -1)
+          mkdir -p $RUNNER_TEMP/ipa/Payload
+          cp -r "$APP_PATH" $RUNNER_TEMP/ipa/Payload/
           cd $RUNNER_TEMP/ipa
           zip -r IReader-unsigned.ipa Payload
 
@@ -54,3 +56,11 @@ jobs:
           name: IReader-unsigned
           path: $RUNNER_TEMP/ipa/IReader-unsigned.ipa
           retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          retention-days: 7
