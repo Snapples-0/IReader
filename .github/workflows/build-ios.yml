@@ -5,79 +5,176 @@ on:
     branches: [ master ]
   workflow_dispatch:
 
+# ─── Shared Gradle tuning written into gradle.properties ─────────────────────
+# Each job gets a fresh runner so we re-apply these settings every time.
+# kotlin.native.memoryMaxHeap caps the Konan process heap independently of JVM.
+# ─────────────────────────────────────────────────────────────────────────────
+
 jobs:
-  build-ios:
-    # If available in your org plan, prefer `macos-latest-large` for extra RAM headroom.
+
+  # ── Job 1: compile domain + data modules (Kotlin/Native, arm64 only) ────────
+  compile-domain-data:
     runs-on: macos-latest
-    timeout-minutes: 90
-
+    timeout-minutes: 60
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
 
-      - name: Tune Gradle for CI
+      - name: Tune Gradle
         run: |
           cat >> gradle.properties <<'EOF'
-          # iOS/Kotlin-Native linking can OOM on default CI heap sizes.
-          org.gradle.jvmargs=-Xmx12g -Dfile.encoding=UTF-8
-          kotlin.native.memoryMaxHeap=14g
+          org.gradle.jvmargs=-Xmx7g -Dfile.encoding=UTF-8
+          kotlin.native.memoryMaxHeap=10g
           org.gradle.parallel=false
           org.gradle.workers.max=1
-          # Keep static cache for stability/perf; switch to `none` only if cache-specific errors appear.
-          kotlin.native.cacheKind=static
+          kotlin.native.cacheKind=none
+          EOF
+
+      - name: Compile domain (IosArm64)
+        run: ./gradlew :domain:compileKotlinIosArm64 --no-daemon
+
+      - name: Compile data (IosArm64)
+        run: ./gradlew :data:compileKotlinIosArm64 --no-daemon
+
+      - name: Cache Gradle build outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-cache-domain-data
+          path: |
+            ~/.gradle/caches
+            build
+            domain/build
+            data/build
+          retention-days: 1
+
+  # ── Job 2: compile presentation modules ──────────────────────────────────────
+  compile-presentation:
+    runs-on: macos-latest
+    needs: compile-domain-data
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
+
+      - name: Restore domain/data build outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: gradle-build-cache-domain-data
+          path: .
+
+      - name: Tune Gradle
+        run: |
+          cat >> gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx7g -Dfile.encoding=UTF-8
+          kotlin.native.memoryMaxHeap=10g
+          org.gradle.parallel=false
+          org.gradle.workers.max=1
+          kotlin.native.cacheKind=none
+          EOF
+
+      - name: Compile presentation-core (IosArm64)
+        run: ./gradlew :presentation-core:compileKotlinIosArm64 --no-daemon
+
+      - name: Compile presentation (IosArm64)
+        run: ./gradlew :presentation:compileKotlinIosArm64 --no-daemon
+
+      - name: Link presentation framework (IosArm64)
+        run: ./gradlew :presentation:linkReleaseFrameworkIosArm64 --no-daemon
+
+      - name: Cache Gradle build outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-cache-presentation
+          path: |
+            ~/.gradle/caches
+            build
+            domain/build
+            data/build
+            presentation-core/build
+            presentation/build
+          retention-days: 1
+
+  # ── Job 3: Xcode archive + export IPA ────────────────────────────────────────
+  archive-and-export:
+    runs-on: macos-latest
+    needs: compile-presentation
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: true
+
+      - name: Restore all Gradle build outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: gradle-build-cache-presentation
+          path: .
+
+      - name: Tune Gradle
+        run: |
+          cat >> gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8
+          kotlin.native.cacheKind=none
           EOF
 
       - name: Install CocoaPods
-        run: |
-          cd iosApp
-          pod install
+        run: cd iosApp && pod install
 
-      - name: Clean Gradle build before archive
-        run: ./gradlew clean
-
-      - name: Build Xcode Archive (unsigned)
+      - name: Xcode Archive (unsigned)
         run: |
           xcodebuild archive \
             -workspace iosApp/iosApp.xcworkspace \
             -scheme iosApp \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath $RUNNER_TEMP/IReader.xcarchive \
+            -archivePath "$RUNNER_TEMP/IReader.xcarchive" \
             ONLY_ACTIVE_ARCH=YES \
             ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE="" \
-            -allowProvisioningUpdates 2>&1 | tee xcodebuild.log
+            2>&1 | tee xcodebuild.log
 
       - name: Export unsigned IPA
-        if: success()
         run: |
           APP_PATH=$(find "$RUNNER_TEMP/IReader.xcarchive" -name "*.app" | head -1)
-          test -n "$APP_PATH"
+          test -n "$APP_PATH" || (echo 'No .app found in archive' && exit 1)
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/"
           cd "$RUNNER_TEMP/ipa"
           zip -r IReader-unsigned.ipa Payload
 
-      - name: Upload IPA artifact
-        if: success()
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: IReader-unsigned
-          path: $RUNNER_TEMP/ipa/IReader-unsigned.ipa
+          path: ${{ runner.temp }}/ipa/IReader-unsigned.ipa
           retention-days: 30
 
-      - name: Upload build log
+      - name: Upload Xcode build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
