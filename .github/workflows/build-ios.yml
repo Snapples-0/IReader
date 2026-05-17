@@ -5,11 +5,6 @@ on:
     branches: [ master ]
   workflow_dispatch:
 
-# ─── Shared Gradle tuning written into gradle.properties ─────────────────────
-# Each job gets a fresh runner so we re-apply these settings every time.
-# kotlin.native.memoryMaxHeap caps the Konan process heap independently of JVM.
-# ─────────────────────────────────────────────────────────────────────────────
-
 jobs:
 
   # ── Job 1: compile domain + data modules (Kotlin/Native, arm64 only) ────────
@@ -44,6 +39,18 @@ jobs:
       - name: Compile data (IosArm64)
         run: ./gradlew :data:compileKotlinIosArm64 --no-daemon
 
+      - name: Upload Kotlin build reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kotlin-build-reports-job1
+          path: |
+            build/reports/kotlin-build/
+            build/reports/problems/
+            **/build/reports/kotlin-build/
+            **/build/reports/problems/
+          retention-days: 3
+
       - name: Cache Gradle build outputs
         uses: actions/upload-artifact@v4
         with:
@@ -55,7 +62,7 @@ jobs:
             data/build
           retention-days: 1
 
-  # ── Job 2: compile presentation modules ──────────────────────────────────────
+  # ── Job 2: compile presentation modules ─────────────────────────────────────
   compile-presentation:
     runs-on: macos-latest
     needs: compile-domain-data
@@ -97,7 +104,20 @@ jobs:
       - name: Link presentation framework (IosArm64)
         run: ./gradlew :presentation:linkReleaseFrameworkIosArm64 --no-daemon
 
+      - name: Upload Kotlin build reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kotlin-build-reports-job2
+          path: |
+            build/reports/kotlin-build/
+            build/reports/problems/
+            **/build/reports/kotlin-build/
+            **/build/reports/problems/
+          retention-days: 3
+
       - name: Cache Gradle build outputs
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: gradle-build-cache-presentation
@@ -110,7 +130,7 @@ jobs:
             presentation/build
           retention-days: 1
 
-  # ── Job 3: Xcode archive + export IPA ────────────────────────────────────────
+  # ── Job 3: Xcode archive + export IPA ───────────────────────────────────────
   archive-and-export:
     runs-on: macos-latest
     needs: compile-presentation
