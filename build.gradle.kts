@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
+import org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink
 
 buildscript {
     dependencies {
@@ -57,18 +58,19 @@ subprojects {
             )
         }
     }
-    
-    // Configure Kotlin/Native compilation (iOS targets)
+
+    // Configure Kotlin/Native compile tasks (iOS targets)
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configureEach {
         compilerOptions {
-            freeCompilerArgs.addAll(
-                "-Xexpect-actual-classes"
-            )
-            // Reduce Kotlin/Native optimizer memory pressure for iOS CI builds.
-            if (this@configureEach.name.contains("Ios", ignoreCase = true)) {
-                freeCompilerArgs.add("-Xbinary=optimization=none")
-            }
+            freeCompilerArgs.addAll("-Xexpect-actual-classes")
         }
+    }
+
+    // Configure Kotlin/Native LINK tasks (framework linking for iOS)
+    // KotlinNativeLink is a separate task type from KotlinNativeCompile.
+    // -Xbinary=optimization=none must be set here to actually reduce linker memory usage.
+    tasks.withType<KotlinNativeLink>().configureEach {
+        kotlinOptions.freeCompilerArgs += listOf("-Xbinary=optimization=none")
     }
     
     // Configure detekt for subprojects
