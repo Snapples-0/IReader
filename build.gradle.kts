@@ -47,6 +47,19 @@ subprojects {
                     ).contains(it.name)
                 }
             }
+
+        // Disable Kotlin/Native optimizer during framework linking to reduce peak RAM in CI.
+        // Must be done inside afterEvaluate so the KMP extension has already registered
+        // the link tasks and the binary is accessible.
+        project.extensions.findByType<org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension>()
+            ?.let { kmpExt ->
+                kmpExt.targets
+                    .filterIsInstance<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>()
+                    .flatMap { it.binaries }
+                    .forEach { binary ->
+                        binary.freeCompilerArgs += listOf("-Xbinary=optimization=none")
+                    }
+            }
     }
 
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
@@ -63,15 +76,6 @@ subprojects {
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>().configureEach {
         compilerOptions {
             freeCompilerArgs.addAll("-Xexpect-actual-classes")
-        }
-    }
-
-    // Disable optimizer during Kotlin/Native framework linking to reduce peak RAM usage in CI.
-    // KotlinNativeLink is a separate task type from KotlinNativeCompile — the flag must be
-    // set here or it is silently ignored during the link phase.
-    tasks.withType<KotlinNativeLink>().configureEach {
-        compilerOptions {
-            freeCompilerArgs.add("-Xbinary=optimization=none")
         }
     }
     
