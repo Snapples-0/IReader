@@ -1,5 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
-import org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
 buildscript {
     dependencies {
@@ -46,18 +46,16 @@ subprojects {
                         "androidTestFixturesRelease",
                     ).contains(it.name)
                 }
-            }
 
-        // Disable Kotlin/Native optimizer during framework linking to reduce peak RAM in CI.
-        // Must be done inside afterEvaluate so the KMP extension has already registered
-        // the link tasks and the binary is accessible.
-        project.extensions.findByType<org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension>()
-            ?.let { kmpExt ->
+                // Disable Kotlin/Native optimizer during framework linking to reduce peak RAM in CI.
+                // This uses the canonical KMP DSL from the Kotlin docs:
+                // https://kotlinlang.org/docs/whatsnew23.html
                 kmpExt.targets
-                    .filterIsInstance<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>()
-                    .flatMap { it.binaries }
-                    .forEach { binary ->
-                        binary.freeCompilerArgs += listOf("-Xbinary=optimization=none")
+                    .withType(KotlinNativeTarget::class.java)
+                    .configureEach {
+                        binaries.configureEach {
+                            freeCompilerArgs += "-Xbinary=optimization=none"
+                        }
                     }
             }
     }
