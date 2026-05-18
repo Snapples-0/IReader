@@ -66,11 +66,13 @@ subprojects {
         }
     }
 
-    // Configure Kotlin/Native LINK tasks (framework linking for iOS)
-    // KotlinNativeLink is a separate task type from KotlinNativeCompile.
-    // -Xbinary=optimization=none must be set here to actually reduce linker memory usage.
+    // Disable optimizer during Kotlin/Native framework linking to reduce peak RAM usage in CI.
+    // KotlinNativeLink is a separate task type from KotlinNativeCompile — the flag must be
+    // set here or it is silently ignored during the link phase.
     tasks.withType<KotlinNativeLink>().configureEach {
-        kotlinOptions.freeCompilerArgs += listOf("-Xbinary=optimization=none")
+        compilerOptions {
+            freeCompilerArgs.add("-Xbinary=optimization=none")
+        }
     }
     
     // Configure detekt for subprojects
@@ -88,9 +90,7 @@ subprojects {
     // Optimize Kotlin compilation tasks
     tasks.withType<KotlinCompilationTask<*>>().configureEach {
         compilerOptions {
-            // Enable progressive mode for better compilation performance
             progressiveMode.set(false)
-            // Suppress version compatibility warnings
             allWarningsAsErrors.set(false)
         }
     }
